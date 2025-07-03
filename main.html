@@ -1,0 +1,186 @@
+<html>
+<head>
+  <title>Port Scanner Tool</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css"></link>
+  <style>
+    body {
+      background-color: #000000;
+      color: #39ff14; /* Neon green text */
+      font-family: 'Courier New', Courier, monospace;
+      position: relative;
+      overflow-x: hidden;
+    }
+    .binary-bg {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      z-index: 0;
+      display: flex;
+      flex-wrap: wrap;
+      font-size: 0.75rem;
+      line-height: 1;
+      user-select: none;
+      opacity: 0.1;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+    }
+    .binary-bg span {
+      width: 0.75rem;
+      height: 1rem;
+      display: inline-block;
+      animation: flicker 3s infinite alternate;
+    }
+    @keyframes flicker {
+      0%, 100% { opacity: 0.1; }
+      50% { opacity: 0.3; }
+    }
+    /* Neon glow effect for main content */
+    .neon-glow {
+      text-shadow:
+        0 0 5px #39ff14,
+        0 0 10px #39ff14,
+        0 0 20px #39ff14,
+        0 0 40px #39ff14;
+    }
+    /* Input and button styling overrides for neon */
+    input, button {
+      background-color: #111111;
+      border-color: #39ff14;
+      color: #39ff14;
+      font-family: 'Courier New', Courier, monospace;
+      box-shadow:
+        0 0 5px #39ff14,
+        0 0 10px #39ff14;
+      transition: box-shadow 0.3s ease;
+    }
+    input:focus, button:hover {
+      box-shadow:
+        0 0 10px #39ff14,
+        0 0 20px #39ff14,
+        0 0 30px #39ff14;
+      outline: none;
+    }
+    label {
+      color: #39ff14;
+    }
+    /* Scrollbar styling */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #000000;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #39ff14;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col items-center p-4 relative text-green-400">
+  <div class="binary-bg" aria-hidden="true" id="binaryBg"></div>
+
+  <h1 class="text-3xl font-bold mb-6 text-center neon-glow">Port Scanner Tool</h1>
+  <div class="w-full max-w-xl bg-black bg-opacity-80 rounded-lg shadow-lg p-6 relative z-10">
+    <form id="scanForm" class="space-y-4">
+      <div>
+        <label for="host" class="block font-semibold mb-1 neon-glow">Host or IP Address</label>
+        <input type="text" id="host" name="host" placeholder="e.g. scanme.nmap.org or 192.168.1.1" required
+          class="w-full rounded px-3 py-2 focus:outline-none" />
+      </div>
+      <div>
+        <label for="ports" class="block font-semibold mb-1 neon-glow">Ports (comma separated or range)</label>
+        <input type="text" id="ports" name="ports" placeholder="e.g. 22,80,443 or 1-1024" required
+          class="w-full rounded px-3 py-2 focus:outline-none" />
+      </div>
+      <button type="submit" class="w-full font-semibold py-2 rounded neon-glow flex justify-center items-center">
+        <i class="fas fa-search mr-2"></i>Scan Ports
+      </button>
+    </form>
+    <div id="results" class="mt-6">
+      <h2 class="text-xl font-semibold mb-3 neon-glow">Scan Results</h2>
+      <ul id="resultsList" class="space-y-2"></ul>
+    </div>
+  </div>
+
+  <script>
+    // Generate binary digits background
+    const binaryBg = document.getElementById('binaryBg');
+    const totalChars = Math.floor(window.innerWidth / 12) * Math.floor(window.innerHeight / 16);
+    const chars = ['0', '1'];
+    for (let i = 0; i < totalChars; i++) {
+      const span = document.createElement('span');
+      span.textContent = chars[Math.floor(Math.random() * 2)];
+      span.style.animationDelay = (Math.random() * 3) + 's';
+      binaryBg.appendChild(span);
+    }
+
+    function parsePorts(portsInput) {
+      const ports = new Set();
+      const parts = portsInput.split(',');
+      parts.forEach(part => {
+        if (part.includes('-')) {
+          const [start, end] = part.split('-').map(Number);
+          for (let i = start; i <= end; i++) {
+            ports.add(i);
+          }
+        } else {
+          const p = Number(part.trim());
+          if (!isNaN(p)) ports.add(p);
+        }
+      });
+      return Array.from(ports).filter(p => p > 0 && p <= 65535);
+    }
+
+    async function checkPort(host, port) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
+        const response = await fetch(`http://${host}:${port}`, { method: 'HEAD', mode: 'no-cors', signal: controller.signal });
+        clearTimeout(timeoutId);
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    document.getElementById('scanForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const host = document.getElementById('host').value.trim();
+      const portsInput = document.getElementById('ports').value.trim();
+      const resultsList = document.getElementById('resultsList');
+      resultsList.innerHTML = '';
+      if (!host || !portsInput) return;
+
+      const ports = parsePorts(portsInput);
+      if (ports.length === 0) {
+        resultsList.innerHTML = '<li class="text-red-600">Invalid ports input.</li>';
+        return;
+      }
+
+      resultsList.innerHTML = '<li class="text-green-400">Scanning ports, please wait...</li>';
+
+      const results = [];
+      for (let i = 0; i < ports.length; i++) {
+        const port = ports[i];
+        resultsList.innerHTML = `<li class="text-green-400">Scanning port ${port} (${i + 1} of ${ports.length})...</li>`;
+        // eslint-disable-next-line no-await-in-loop
+        const open = await checkPort(host, port);
+        results.push({ port, open });
+      }
+
+      resultsList.innerHTML = '';
+      results.forEach(({ port, open }) => {
+        const li = document.createElement('li');
+        li.className = open ? 'text-green-400 font-semibold' : 'text-red-600';
+        li.textContent = `Port ${port}: ${open ? 'Open' : 'Closed or filtered'}`;
+        resultsList.appendChild(li);
+      });
+    });
+  </script>
+</body>
+</html>
